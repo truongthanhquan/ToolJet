@@ -4,13 +4,19 @@ import { LeftSidebarItem } from './SidebarItem';
 import { commentsService } from '@/_services';
 import useRouter from '@/_hooks/use-router';
 import { useAppVersionStore } from '@/_stores/appVersionStore';
+import { useEditorStore } from '@/_stores/editorStore';
 import { shallow } from 'zustand/shallow';
 
-export const LeftSidebarComment = forwardRef(({ toggleComments, selectedSidebarItem, currentPageId }, ref) => {
-  const darkMode = localStorage.getItem('darkMode') === 'true';
+export const LeftSidebarComment = forwardRef(({ selectedSidebarItem, currentPageId }, ref) => {
   const { appVersionsId } = useAppVersionStore(
     (state) => ({
       appVersionsId: state?.editingVersion?.id,
+    }),
+    shallow
+  );
+  const { toggleComments } = useEditorStore(
+    (state) => ({
+      toggleComments: state?.actions.toggleComments,
     }),
     shallow
   );
@@ -26,17 +32,15 @@ export const LeftSidebarComment = forwardRef(({ toggleComments, selectedSidebarI
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appVersionsId, currentPageId]);
-
   return (
     <LeftSidebarItem
       commentBadge={notifications?.length > 0}
       selectedSidebarItem={selectedSidebarItem}
-      title={appVersionsId ? 'toggle comments' : 'Comments section will be available once you save this application'}
-      icon={darkMode ? `comments-dark` : 'comments-light'}
-      className={cx(`left-sidebar-item left-sidebar-layout sidebar-comments`, {
+      title={appVersionsId ? 'Toggle comments' : 'Comments section will be available once you save this application'}
+      icon={'comments'}
+      className={cx(`left-sidebar-item left-sidebar-layout`, {
         disabled: !appVersionsId,
         active: isActive,
-        dark: darkMode,
       })}
       onClick={() => {
         toggleActive(!isActive);

@@ -8,6 +8,9 @@ export const appService = {
   cloneApp,
   exportApp,
   importApp,
+  exportResource,
+  importResource,
+  cloneResource,
   changeIcon,
   deleteApp,
   getApp,
@@ -22,6 +25,7 @@ export const appService = {
   setPasswordFromToken,
   acceptInvite,
   getVersions,
+  getTables,
 };
 
 function getConfig() {
@@ -44,8 +48,13 @@ function createApp(body = {}) {
   return fetch(`${config.apiUrl}/apps`, requestOptions).then(handleResponse);
 }
 
-function cloneApp(id) {
-  const requestOptions = { method: 'POST', headers: authHeader(), credentials: 'include' };
+function cloneApp(id, name) {
+  const requestOptions = {
+    method: 'POST',
+    headers: authHeader(),
+    credentials: 'include',
+    body: JSON.stringify({ name }),
+  };
   return fetch(`${config.apiUrl}/apps/${id}/clone`, requestOptions).then(handleResponse);
 }
 
@@ -56,14 +65,56 @@ function exportApp(id, versionId) {
   );
 }
 
+function exportResource(body) {
+  const requestOptions = {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(body),
+    credentials: 'include',
+  };
+
+  return fetch(`${config.apiUrl}/v2/resources/export`, requestOptions).then(handleResponse);
+}
+
+function importResource(body) {
+  const requestOptions = {
+    method: 'POST',
+    headers: authHeader(),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  };
+  return fetch(`${config.apiUrl}/v2/resources/import`, requestOptions).then(handleResponse);
+}
+
+function cloneResource(body) {
+  const requestOptions = {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(body),
+    credentials: 'include',
+  };
+
+  return fetch(`${config.apiUrl}/v2/resources/clone`, requestOptions).then(handleResponse);
+}
+
 function getVersions(id) {
   const requestOptions = { method: 'GET', headers: authHeader(), credentials: 'include' };
   return fetch(`${config.apiUrl}/apps/${id}/versions`, requestOptions).then(handleResponse);
 }
 
-function importApp(body) {
-  const requestOptions = { method: 'POST', headers: authHeader(), credentials: 'include', body: JSON.stringify(body) };
+function importApp(app, name) {
+  const requestOptions = {
+    method: 'POST',
+    headers: authHeader(),
+    credentials: 'include',
+    body: JSON.stringify({ app, name }),
+  };
   return fetch(`${config.apiUrl}/apps/import`, requestOptions).then(handleResponse);
+}
+
+function getTables(id) {
+  const requestOptions = { method: 'GET', headers: authHeader(), credentials: 'include' };
+  return fetch(`${config.apiUrl}/apps/${id}/tables`, requestOptions).then(handleResponse);
 }
 
 function changeIcon(icon, appId) {

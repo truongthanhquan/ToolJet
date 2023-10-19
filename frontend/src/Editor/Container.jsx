@@ -15,8 +15,12 @@ import Spinner from '@/_ui/Spinner';
 import { useHotkeys } from 'react-hotkeys-hook';
 const produce = require('immer').default;
 import { addComponents, addNewWidgetToTheEditor } from '@/_helpers/appUtils';
+import { useCurrentState } from '@/_stores/currentStateStore';
 import { useAppVersionStore } from '@/_stores/appVersionStore';
+import { useEditorStore } from '@/_stores/editorStore';
 import { shallow } from 'zustand/shallow';
+
+const NO_OF_GRIDS = 43;
 
 export const Container = ({
   canvasWidth,
@@ -26,39 +30,43 @@ export const Container = ({
   onEvent,
   appDefinition,
   appDefinitionChanged,
-  currentState,
   onComponentOptionChanged,
   onComponentOptionsChanged,
   appLoading,
   setSelectedComponent,
   zoomLevel,
-  currentLayout,
   removeComponent,
   deviceWindowWidth,
-  selectedComponents,
   darkMode,
-  showComments,
   socket,
   handleUndo,
   handleRedo,
-  onComponentHover,
-  hoveredComponent,
   sideBarDebugger,
   currentPageId,
 }) => {
+  const gridWidth = canvasWidth / NO_OF_GRIDS;
   const styles = {
     width: currentLayout === 'mobile' ? deviceWindowWidth : '100%',
     maxWidth: `${canvasWidth}px`,
-    backgroundSize: `${canvasWidth / 43}px 10px`,
+    backgroundSize: `${gridWidth}px 10px`,
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const components = appDefinition.pages[currentPageId]?.components ?? {};
+  const currentState = useCurrentState();
   const { appVersionsId, enableReleasedVersionPopupState, isVersionReleased } = useAppVersionStore(
     (state) => ({
       appVersionsId: state?.editingVersion?.id,
       enableReleasedVersionPopupState: state.actions.enableReleasedVersionPopupState,
       isVersionReleased: state.isVersionReleased,
+    }),
+    shallow
+  );
+  const { showComments, currentLayout, selectedComponents } = useEditorStore(
+    (state) => ({
+      showComments: state?.showComments,
+      currentLayout: state?.currentLayout,
+      selectedComponents: state?.selectedComponents,
     }),
     shallow
   );
@@ -128,6 +136,7 @@ export const Container = ({
   const noOfBoxs = Object.values(boxes || []).length;
   useEffect(() => {
     updateCanvasHeight(boxes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noOfBoxs]);
 
   const moveBox = useCallback(
@@ -183,21 +192,24 @@ export const Container = ({
     return (x * 100) / canvasWidth;
   }
 
-  function updateCanvasHeight(components) {
-    const maxHeight = Object.values(components).reduce((max, component) => {
-      const layout = component?.layouts?.[currentLayout];
-      if (!layout) {
-        return max;
-      }
-      const sum = layout.top + layout.height;
-      return Math.max(max, sum);
-    }, 0);
+  const updateCanvasHeight = useCallback(
+    (components) => {
+      const maxHeight = Object.values(components).reduce((max, component) => {
+        const layout = component?.layouts?.[currentLayout];
+        if (!layout) {
+          return max;
+        }
+        const sum = layout.top + layout.height;
+        return Math.max(max, sum);
+      }, 0);
 
-    const bottomPadding = mode === 'view' ? 100 : 300;
-    const frameHeight = mode === 'view' ? (appDefinition.globalSettings?.hideHeader ? 0 : 45) : 85;
+      const bottomPadding = mode === 'view' ? 100 : 300;
+      const frameHeight = mode === 'view' ? 45 : 85;
 
-    setCanvasHeight(`max(100vh - ${frameHeight}px, ${maxHeight + bottomPadding}px)`);
-  }
+      setCanvasHeight(`max(100vh - ${frameHeight}px, ${maxHeight + bottomPadding}px)`);
+    },
+    [setCanvasHeight, currentLayout, mode]
+  );
 
   useEffect(() => {
     setIsDragging(draggingState);
@@ -231,7 +243,6 @@ export const Container = ({
         const canvasBoundingRect = document.getElementsByClassName('real-canvas')[0].getBoundingClientRect();
         const componentMeta = componentTypes.find((component) => component.component === item.component.component);
         console.log('adding new component');
-
         const newComponent = addNewWidgetToTheEditor(
           componentMeta,
           monitor,
@@ -263,118 +274,136 @@ export const Container = ({
     [moveBox]
   );
 
-  function onDragStop(e, componentId, direction, currentLayout) {
-    if (isVersionReleased) {
-      enableReleasedVersionPopupState();
-      return;
-    }
-    // const id = componentId ? componentId : uuidv4();
+  const onDragStop = useCallback(
+    (e, componentId, direction, currentLayout) => {
+      if (isVersionReleased) {
+        enableReleasedVersionPopupState();
+        return;
+      }
+      // const id = componentId ? componentId : uuidv4();
 
-    // Get the width of the canvas
-    const canvasBounds = document.getElementsByClassName('real-canvas')[0].getBoundingClientRect();
-    const canvasWidth = canvasBounds?.width;
-    const nodeBounds = direction.node.getBoundingClientRect();
+      // Get the width of the canvas
+      const canvasBounds = document.getElementsByClassName('real-canvas')[0].getBoundingClientRect();
+      const canvasWidth = canvasBounds?.width;
+      const nodeBounds = direction.node.getBoundingClientRect();
 
-    // Computing the left offset
-    const leftOffset = nodeBounds.x - canvasBounds.x;
-    const currentLeftOffset = boxes[componentId].layouts[currentLayout].left;
-    const leftDiff = currentLeftOffset - convertXToPercentage(leftOffset, canvasWidth);
+      // Computing the left offset
+      const leftOffset = nodeBounds.x - canvasBounds.x;
+      const currentLeftOffset = boxes[componentId]?.layouts?.[currentLayout]?.left;
+      const leftDiff = currentLeftOffset - convertXToPercentage(leftOffset, canvasWidth);
 
-    // Computing the top offset
-    // const currentTopOffset = boxes[componentId].layouts[currentLayout].top;
-    const topDiff = boxes[componentId].layouts[currentLayout].top - (nodeBounds.y - canvasBounds.y);
+      // Computing the top offset
+      // const currentTopOffset = boxes[componentId].layouts[currentLayout].top;
+      const topDiff = boxes[componentId].layouts[currentLayout].top - (nodeBounds.y - canvasBounds.y);
 
-    let newBoxes = { ...boxes };
+      let newBoxes = { ...boxes };
 
-    for (const selectedComponent of selectedComponents) {
-      newBoxes = produce(newBoxes, (draft) => {
-        if (draft[selectedComponent.id]) {
-          const topOffset = draft[selectedComponent.id].layouts[currentLayout].top;
-          const leftOffset = draft[selectedComponent.id].layouts[currentLayout].left;
+      for (const selectedComponent of selectedComponents) {
+        newBoxes = produce(newBoxes, (draft) => {
+          if (draft[selectedComponent.id]) {
+            const topOffset = draft[selectedComponent.id].layouts[currentLayout].top;
+            const leftOffset = draft[selectedComponent.id].layouts[currentLayout].left;
 
-          draft[selectedComponent.id].layouts[currentLayout].top = topOffset - topDiff;
-          draft[selectedComponent.id].layouts[currentLayout].left = leftOffset - leftDiff;
-        }
-      });
-    }
+            draft[selectedComponent.id].layouts[currentLayout].top = topOffset - topDiff;
+            draft[selectedComponent.id].layouts[currentLayout].left = leftOffset - leftDiff;
+          }
+        });
+      }
 
-    setBoxes(newBoxes);
-    updateCanvasHeight(newBoxes);
-  }
+      setBoxes(newBoxes);
+      updateCanvasHeight(newBoxes);
+    },
+    [isVersionReleased, enableReleasedVersionPopupState, boxes, setBoxes, selectedComponents, updateCanvasHeight]
+  );
 
-  function onResizeStop(id, e, direction, ref, d, position) {
-    if (isVersionReleased) {
-      enableReleasedVersionPopupState();
-      return;
-    }
-    const deltaWidth = d.width;
-    const deltaHeight = d.height;
+  const onResizeStop = useCallback(
+    (id, e, direction, ref, d, position) => {
+      if (isVersionReleased) {
+        enableReleasedVersionPopupState();
+        return;
+      }
 
-    let { x, y } = position;
+      const deltaWidth = Math.round(d.width / gridWidth) * gridWidth; //rounding of width of element to nearest mulitple of gridWidth
+      const deltaHeight = d.height;
 
-    const defaultData = {
-      top: 100,
-      left: 0,
-      width: 445,
-      height: 500,
-    };
+      if (deltaWidth === 0 && deltaHeight === 0) {
+        return;
+      }
 
-    let { left, top, width, height } = boxes[id]['layouts'][currentLayout] || defaultData;
+      let { x, y } = position;
+      x = Math.round(x / gridWidth) * gridWidth;
 
-    const boundingRect = document.getElementsByClassName('canvas-area')[0].getBoundingClientRect();
-    const canvasWidth = boundingRect?.width;
+      const defaultData = {
+        top: 100,
+        left: 0,
+        width: 445,
+        height: 500,
+      };
 
-    width = Math.round(width + (deltaWidth * 43) / canvasWidth); // convert the width delta to percentage
-    height = height + deltaHeight;
+      let { left, top, width, height } = boxes[id]['layouts'][currentLayout] || defaultData;
 
-    top = y;
-    left = (x * 100) / canvasWidth;
+      const boundingRect = document.getElementsByClassName('canvas-area')[0].getBoundingClientRect();
+      const canvasWidth = boundingRect?.width;
 
-    let newBoxes = {
-      ...boxes,
-      [id]: {
-        ...boxes[id],
-        layouts: {
-          ...boxes[id]['layouts'],
-          [currentLayout]: {
-            ...boxes[id]['layouts'][currentLayout],
-            width,
-            height,
-            top,
-            left,
+      //round the width to nearest multiple of gridwidth before converting to %
+      const currentWidth = (canvasWidth * width) / NO_OF_GRIDS;
+      let newWidth = currentWidth + deltaWidth;
+      newWidth = Math.round(newWidth / gridWidth) * gridWidth;
+      width = (newWidth * NO_OF_GRIDS) / canvasWidth;
+
+      height = height + deltaHeight;
+
+      top = y;
+      left = (x * 100) / canvasWidth;
+
+      let newBoxes = {
+        ...boxes,
+        [id]: {
+          ...boxes[id],
+          layouts: {
+            ...boxes[id]['layouts'],
+            [currentLayout]: {
+              ...boxes[id]['layouts'][currentLayout],
+              width,
+              height,
+              top,
+              left,
+            },
           },
         },
-      },
-    };
+      };
 
-    setBoxes(newBoxes);
-    updateCanvasHeight(newBoxes);
-  }
+      setBoxes(newBoxes);
+      updateCanvasHeight(newBoxes);
+    },
+    [setBoxes, currentLayout, boxes, enableReleasedVersionPopupState, isVersionReleased, updateCanvasHeight, gridWidth]
+  );
 
-  function paramUpdated(id, param, value) {
-    if (Object.keys(value).length > 0) {
-      setBoxes((boxes) =>
-        update(boxes, {
-          [id]: {
-            $merge: {
-              component: {
-                ...boxes[id].component,
-                definition: {
-                  ...boxes[id].component.definition,
-                  properties: {
-                    ...boxes[id].component.definition.properties,
-                    [param]: value,
+  const paramUpdated = useCallback(
+    (id, param, value) => {
+      if (Object.keys(value).length > 0) {
+        setBoxes((boxes) =>
+          update(boxes, {
+            [id]: {
+              $merge: {
+                component: {
+                  ...boxes[id].component,
+                  definition: {
+                    ...boxes[id].component.definition,
+                    properties: {
+                      ...boxes[id].component.definition.properties,
+                      [param]: value,
+                    },
                   },
                 },
               },
             },
-          },
-        })
-      );
-    }
-  }
-
-  React.useEffect(() => {}, [selectedComponents]);
+          })
+        );
+      }
+    },
+    [setBoxes]
+  );
 
   const handleAddThread = async (e) => {
     e.stopPropogation && e.stopPropogation();
@@ -481,6 +510,66 @@ export const Container = ({
     return componentWithChildren;
   }, [components]);
 
+  const resizingStatusChanged = useCallback(
+    (status) => {
+      setIsResizing(status);
+    },
+    [setIsResizing]
+  );
+
+  const draggingStatusChanged = useCallback(
+    (status) => {
+      setIsDragging(status);
+    },
+    [setIsDragging]
+  );
+
+  const containerProps = useMemo(() => {
+    return {
+      mode,
+      snapToGrid,
+      onComponentClick,
+      onEvent,
+      appDefinition,
+      appDefinitionChanged,
+      currentState,
+      onComponentOptionChanged,
+      onComponentOptionsChanged,
+      appLoading,
+      zoomLevel,
+      setSelectedComponent,
+      removeComponent,
+      currentLayout,
+      deviceWindowWidth,
+      selectedComponents,
+      darkMode,
+      sideBarDebugger,
+      currentPageId,
+      childComponents,
+    };
+  }, [
+    mode,
+    snapToGrid,
+    onComponentClick,
+    onEvent,
+    appDefinition,
+    appDefinitionChanged,
+    currentState,
+    onComponentOptionChanged,
+    onComponentOptionsChanged,
+    appLoading,
+    zoomLevel,
+    setSelectedComponent,
+    removeComponent,
+    currentLayout,
+    deviceWindowWidth,
+    selectedComponents,
+    darkMode,
+    sideBarDebugger,
+    currentPageId,
+    childComponents,
+  ]);
+
   return (
     <div
       {...(config.COMMENT_FEATURE_ENABLE && showComments && { onClick: handleAddThread })}
@@ -538,56 +627,23 @@ export const Container = ({
               onComponentOptionChanged={onComponentOptionChanged}
               onComponentOptionsChanged={onComponentOptionsChanged}
               key={key}
-              currentState={currentState}
               onResizeStop={onResizeStop}
               onDragStop={onDragStop}
               paramUpdated={paramUpdated}
               id={key}
               {...boxes[key]}
               mode={mode}
-              resizingStatusChanged={(status) => setIsResizing(status)}
-              draggingStatusChanged={(status) => setIsDragging(status)}
+              resizingStatusChanged={resizingStatusChanged}
+              draggingStatusChanged={draggingStatusChanged}
               inCanvas={true}
               zoomLevel={zoomLevel}
               setSelectedComponent={setSelectedComponent}
               removeComponent={removeComponent}
-              currentLayout={currentLayout}
               deviceWindowWidth={deviceWindowWidth}
-              isSelectedComponent={
-                mode === 'edit' ? selectedComponents.find((component) => component.id === key) : false
-              }
               darkMode={darkMode}
-              onComponentHover={onComponentHover}
-              hoveredComponent={hoveredComponent}
               sideBarDebugger={sideBarDebugger}
-              isMultipleComponentsSelected={selectedComponents?.length > 1 ? true : false}
               childComponents={childComponents[key]}
-              containerProps={{
-                mode,
-                snapToGrid,
-                onComponentClick,
-                onEvent,
-                appDefinition,
-                appDefinitionChanged,
-                currentState,
-                onComponentOptionChanged,
-                onComponentOptionsChanged,
-                appLoading,
-                zoomLevel,
-                setSelectedComponent,
-                removeComponent,
-                currentLayout,
-                deviceWindowWidth,
-                selectedComponents,
-                darkMode,
-                onComponentHover,
-                hoveredComponent,
-                sideBarDebugger,
-                addDefaultChildren,
-                currentPageId,
-                childComponents,
-              }}
-              isVersionReleased={isVersionReleased}
+              containerProps={{ ...containerProps, addDefaultChildren }}
             />
           );
         }
@@ -595,10 +651,15 @@ export const Container = ({
       {Object.keys(boxes).length === 0 && !appLoading && !isDragging && (
         <div style={{ paddingTop: '10%' }}>
           <div className="mx-auto w-50 p-5 bg-light no-components-box">
-            <center className="text-muted">
+            <center className="text-muted" data-cy={`empty-editor-text`}>
               You haven&apos;t added any components yet. Drag components from the right sidebar and drop here. Check out
               our&nbsp;
-              <a href="https://docs.tooljet.com/docs#the-very-quick-quickstart" target="_blank" rel="noreferrer">
+              <a
+                className="color-indigo9 "
+                href="https://docs.tooljet.com/docs/#quickstart-guide"
+                target="_blank"
+                rel="noreferrer"
+              >
                 guide
               </a>{' '}
               on adding components.

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import cx from 'classnames';
 import { AppMenu } from './AppMenu';
 import moment from 'moment';
-import { ToolTip } from '@/_components';
+import { ToolTip } from '@/_components/index';
 import useHover from '@/_hooks/useHover';
 import configs from './Configs/AppIcon.json';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ import SolidIcon from '@/_ui/Icon/SolidIcons';
 import BulkIcon from '@/_ui/Icon/BulkIcons';
 
 import { getPrivateRoute } from '@/_helpers/routes';
+import { getSubpath } from '@/_helpers/utils';
 const { defaultIcon } = configs;
 
 export default function AppCard({
@@ -19,7 +20,6 @@ export default function AppCard({
   canCreateApp,
   canDeleteApp,
   deleteApp,
-  cloneApp,
   exportApp,
   appActionModal,
   canUpdateApp,
@@ -65,18 +65,18 @@ export default function AppCard({
 
   return (
     <div className="card homepage-app-card animation-fade">
-      <div key={app.id} ref={hoverRef} data-cy={`${app.name.toLowerCase().replace(/\s+/g, '-')}-card`}>
+      <div key={app?.id} ref={hoverRef} data-cy={`${app?.name.toLowerCase().replace(/\s+/g, '-')}-card`}>
         <div className="row home-app-card-header">
           <div className="col-12 d-flex justify-content-between">
             <div>
               <div className="app-icon-main">
-                <div className="app-icon d-flex" data-cy={`app-card-${app.icon}-icon`}>
+                <div className="app-icon d-flex" data-cy={`app-card-${app?.icon}-icon`}>
                   {AppIcon && AppIcon}
                 </div>
               </div>
             </div>
             <div visible={focused}>
-              {(canCreateApp(app) || canDeleteApp(app)) && (
+              {(canCreateApp(app) || canDeleteApp(app) || canUpdateApp(app)) && (
                 <AppMenu
                   onMenuOpen={onMenuToggle}
                   openAppActionModal={appActionModalCallBack}
@@ -84,7 +84,6 @@ export default function AppCard({
                   canDeleteApp={canDeleteApp(app)}
                   canUpdateApp={canUpdateApp(app)}
                   deleteApp={() => deleteApp(app)}
-                  cloneApp={() => cloneApp(app)}
                   exportApp={() => exportApp(app)}
                   isMenuOpen={isMenuOpen}
                   darkMode={darkMode}
@@ -149,7 +148,9 @@ export default function AppCard({
                 )}
                 onClick={() => {
                   if (app?.current_version_id) {
-                    window.open(urlJoin(window.public_config?.TOOLJET_HOST, `/applications/${app.slug}`));
+                    window.open(
+                      urlJoin(window.public_config?.TOOLJET_HOST, getSubpath() ?? '', `/applications/${app.slug}`)
+                    );
                   } else {
                     navigate(app?.current_version_id ? `/applications/${app.slug}` : '');
                   }

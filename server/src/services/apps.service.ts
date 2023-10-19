@@ -12,13 +12,7 @@ import { AppGroupPermission } from 'src/entities/app_group_permission.entity';
 import { AppImportExportService } from './app_import_export.service';
 import { DataSourcesService } from './data_sources.service';
 import { Credential } from 'src/entities/credential.entity';
-import {
-  catchDbException,
-  cleanObject,
-  dbTransactionWrap,
-  defaultAppEnvironments,
-  generateNextName,
-} from 'src/helpers/utils.helper';
+import { catchDbException, cleanObject, dbTransactionWrap, defaultAppEnvironments } from 'src/helpers/utils.helper';
 import { AppUpdateDto } from '@dto/app-update.dto';
 import { viewableAppsQuery } from 'src/helpers/queries';
 import { VersionEditDto } from '@dto/version-edit.dto';
@@ -103,35 +97,40 @@ export class AppsService {
     });
   }
 
-  async create(user: User, manager: EntityManager): Promise<App> {
+  async create(name: string, user: User, manager: EntityManager): Promise<App> {
     return await dbTransactionWrap(async (manager: EntityManager) => {
-      const name = await generateNextName('My app');
-      const app = await manager.save(
-        manager.create(App, {
-          name,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          organizationId: user.organizationId,
-          userId: user.id,
-        })
+      return await catchDbException(
+        async () => {
+          const app = await manager.save(
+            manager.create(App, {
+              name,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              organizationId: user.organizationId,
+              userId: user.id,
+            })
+          );
+
+          //create default app version
+          await this.createVersion(user, app, 'v1', null, null, manager);
+
+          await manager.save(
+            manager.create(AppUser, {
+              userId: user.id,
+              appId: app.id,
+              role: 'admin',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })
+          );
+
+          await this.createAppGroupPermissionsForAdmin(app, manager);
+          return app;
+        },
+        DataBaseConstraints.APP_NAME_UNIQUE,
+        'This app name is already taken.'
       );
-
-      //create default app version
-      await this.createVersion(user, app, 'v1', null, null, manager);
-
-      await manager.save(
-        manager.create(AppUser, {
-          userId: user.id,
-          appId: app.id,
-          role: 'admin',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        })
-      );
-
-      await this.createAppGroupPermissionsForAdmin(app, manager);
-      return app;
-    }, manager);
+    });
   }
 
   async createAppGroupPermissionsForAdmin(app: App, manager: EntityManager): Promise<void> {
@@ -170,9 +169,9 @@ export class AppsService {
     }
   }
 
-  async clone(existingApp: App, user: User): Promise<App> {
+  async clone(existingApp: App, user: User, appName: string): Promise<App> {
     const appWithRelations = await this.appImportExportService.export(user, existingApp.id);
-    const clonedApp = await this.appImportExportService.import(user, appWithRelations);
+    const clonedApp = await this.appImportExportService.import(user, appWithRelations, appName);
 
     return clonedApp;
   }
@@ -652,6 +651,24 @@ export class AppsService {
         encrypted: options[key]['encrypted'],
         credential_id: options[key]['credential_id'],
       };
+    });
+  }
+
+  async findTooljetDbTables(appId: string): Promise<{ table_id: string }[]> {
+    return await dbTransactionWrap(async (manager: EntityManager) => {
+      const tooljetDbDataQueries = await manager
+        .createQueryBuilder(DataQuery, 'data_queries')
+        .innerJoin(DataSource, 'data_sources', 'data_queries.data_source_id = data_sources.id')
+        .innerJoin(AppVersion, 'app_versions', 'app_versions.id = data_sources.app_version_id')
+        .where('app_versions.app_id = :appId', { appId })
+        .andWhere('data_sources.kind = :kind', { kind: 'tooljetdb' })
+        .getMany();
+
+      const uniqTableIds = [...new Set(tooljetDbDataQueries.map((dq) => dq.options['table_id']))];
+
+      return uniqTableIds.map((table_id) => {
+        return { table_id };
+      });
     });
   }
 }

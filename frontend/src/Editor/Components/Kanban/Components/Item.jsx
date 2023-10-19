@@ -1,7 +1,6 @@
 import React, { useEffect, forwardRef } from 'react';
 import '@/_styles/widgets/kanban.scss';
 import cx from 'classnames';
-
 import { Handle } from './Handle';
 import { SubContainer } from '@/Editor/SubContainer';
 
@@ -61,10 +60,9 @@ export const Item = React.memo(
               target?.parent?.classList?.contains('resizer-active')
             )
               return;
-            setExposedVariable('lastSelectedCard', cardDataAsObj[value]).then(() => {
-              setShowModal(true);
-              fireEvent('onCardSelected');
-            });
+            setExposedVariable('lastSelectedCard', cardDataAsObj[value]);
+            setShowModal(true);
+            fireEvent('onCardSelected');
           }}
         >
           <div

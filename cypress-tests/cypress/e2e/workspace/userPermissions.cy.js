@@ -23,16 +23,15 @@ describe("User permissions", () => {
     permissions.reset();
     cy.get(commonSelectors.homePageLogo).click();
     cy.wait("@homePage");
-    cy.createApp();
-    cy.renameApp(data.appName);
+    cy.createApp(data.appName);
     cy.dragAndDropWidget("Table", 250, 250);
     cy.get(commonSelectors.editorPageLogo).click();
-    cy.reloadAppForTheElement(data.appName);
     permissions.addNewUserMW(data.firstName, data.email);
     common.logout();
   });
   beforeEach(() => {
     cy.appUILogin();
+    cy.visitTheWorkspace("My workspace");
   });
 
   it("Should verify the create new app permission", () => {
@@ -40,11 +39,7 @@ describe("User permissions", () => {
     cy.login(data.email, usersText.password);
     cy.get("body").then(($title) => {
       if ($title.text().includes(dashboardText.emptyPageDescription)) {
-        cy.get(commonSelectors.dashboardAppCreateButton).click();
-        cy.verifyToastMessage(
-          commonSelectors.toastMessage,
-          usersText.createAppPermissionToast
-        );
+        cy.get(commonSelectors.dashboardAppCreateButton).should('be.disabled');
       } else {
         cy.contains(dashboardText.createAppButton).should("not.exist");
       }
@@ -87,7 +82,10 @@ describe("User permissions", () => {
       .within(() => {
         cy.get("td input").eq(1).check();
       });
-    cy.verifyToastMessage(commonSelectors.toastMessage, "App permissions updated")
+    cy.verifyToastMessage(
+      commonSelectors.toastMessage,
+      "App permissions updated"
+    );
 
     common.logout();
     cy.login(data.email, usersText.password);
@@ -116,7 +114,21 @@ describe("User permissions", () => {
   });
 
   it("Should verify the Create and Delete app permission", () => {
+    data.appName = `${fake.companyName}-App`;
+    cy.createApp(data.appName);
+    cy.get(commonSelectors.editorPageLogo).click();
+    cy.wait(1000);
     common.navigateToManageGroups();
+    cy.get(groupsSelector.appSearchBox).click();
+    cy.get(groupsSelector.searchBoxOptions).contains(data.appName).click();
+    cy.get(groupsSelector.selectAddButton).click();
+    cy.get("table").contains("td", data.appName);
+    cy.contains("td", data.appName)
+      .parent()
+      .within(() => {
+        cy.get("td input").first().should("be.checked");
+      });
+    cy.wait(500)
     cy.get(groupsSelector.permissionsLink).click();
     cy.get(groupsSelector.appsCreateCheck).check();
     cy.get(groupsSelector.permissionsLink).click();
@@ -137,11 +149,10 @@ describe("User permissions", () => {
     common.viewAppCardOptions(data.appName);
     cy.contains("Delete app").should("not.exist");
 
-    cy.createApp();
-    cy.renameApp(data.email);
+    cy.createApp(data.email);
+
     cy.dragAndDropWidget("Table", 50, 50);
     cy.get(commonSelectors.editorPageLogo).click();
-    cy.reloadAppForTheElement(data.email);
     common.viewAppCardOptions(data.email);
     cy.contains("Delete app").should("exist");
     cy.get(commonSelectors.appCardOptions(commonText.deleteAppOption)).click();
@@ -204,56 +215,23 @@ describe("User permissions", () => {
 
   it("Should verify Create/Update/Delete workspace variable permission", () => {
     common.navigateToWorkspaceVariable();
-    cy.get(workspaceVarSelectors.addNewVariableButton).should("exist");
-
-    common.logout();
-    cy.login(data.email, usersText.password);
-    common.navigateToWorkspaceVariable();
-    cy.get(workspaceVarSelectors.addNewVariableButton).should("not.exist");
-
-    permissions.adminLogin();
-    cy.get(groupsSelector.permissionsLink).click();
-    cy.get(groupsSelector.workspaceVarCheckbox).check();
+    cy.get('[data-cy="alert-info-text"]>>.text-muted').verifyVisibleElement(
+      "have.text",
+      "There are no Workspace variables. Workspace variables are being deprecated soon, so please use Workspace constants instead."
+    );
+    cy.get(
+      '[data-cy="go-to-workspace-constants-option-button"]'
+    ).verifyVisibleElement("have.text", "Go to workspace constants");
     common.logout();
 
     cy.login(data.email, usersText.password);
     common.navigateToWorkspaceVariable();
-    cy.get(workspaceVarSelectors.addNewVariableButton).should("exist").click();
-    cy.clearAndType(
-      workspaceVarSelectors.workspaceVarNameInput,
-      data.firstName
-    );
-    cy.clearAndType(
-      workspaceVarSelectors.workspaceVarValueInput,
-      common.randomValue()
-    );
-    cy.get(workspaceVarSelectors.addVariableButton).click();
-    cy.verifyToastMessage(
-      commonSelectors.toastMessage,
-      workspaceVarText.workspaceVarCreatedToast
-    );
-    cy.get(workspaceVarSelectors.workspaceVarName(data.firstName)).should(
-      "be.visible"
+    cy.get('[data-cy="alert-info-text"]>>.text-muted').verifyVisibleElement(
+      "have.text",
+      "There are no Workspace variables. Workspace variables are being deprecated soon, so please use Workspace constants instead."
     );
     cy.get(
-      workspaceVarSelectors.workspaceVarEditButton(data.firstName)
-    ).click();
-    cy.clearAndType(workspaceVarSelectors.workspaceVarNameInput, data.lastName);
-    cy.get(workspaceVarSelectors.addVariableButton).click();
-    cy.verifyToastMessage(
-      commonSelectors.toastMessage,
-      workspaceVarText.workspaceVarUpdatedToast
-    );
-    cy.get(workspaceVarSelectors.workspaceVarName(data.lastName)).should(
-      "be.visible"
-    );
-    cy.get(
-      workspaceVarSelectors.workspaceVarDeleteButton(data.lastName)
-    ).click();
-    cy.get(commonSelectors.buttonSelector("Yes")).click();
-    cy.verifyToastMessage(
-      commonSelectors.toastMessage,
-      workspaceVarText.workspaceVarDeletedToast
-    );
+      '[data-cy="go-to-workspace-constants-option-button"]'
+    ).verifyVisibleElement("have.text", "Go to workspace constants");
   });
 });

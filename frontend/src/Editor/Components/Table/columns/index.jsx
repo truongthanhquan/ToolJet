@@ -1,14 +1,14 @@
 import React from 'react';
 import _ from 'lodash';
 import SelectSearch from 'react-select-search';
-import { resolveReferences, validateWidget } from '@/_helpers/utils';
+import { resolveReferences, validateWidget, determineJustifyContentValue } from '@/_helpers/utils';
 import { CustomSelect } from '../CustomSelect';
 import { Tags } from '../Tags';
 import { Radio } from '../Radio';
 import { Toggle } from '../Toggle';
 import { Datepicker } from '../Datepicker';
+import { Link } from '../Link';
 import moment from 'moment';
-
 export default function generateColumnsData({
   columnProperties,
   columnSizes,
@@ -93,15 +93,16 @@ export default function generateColumnsData({
       customRule: column?.customRule,
       sortType,
       columnVisibility: column?.columnVisibility ?? true,
-      Cell: function ({ cell, isEditable, newRowsChangeSet = null }) {
+      horizontalAlignment: column?.horizontalAlignment ?? 'left',
+      Cell: function ({ cell, isEditable, newRowsChangeSet = null, horizontalAlignment }) {
         const updatedChangeSet = newRowsChangeSet === null ? changeSet : newRowsChangeSet;
         const rowChangeSet = updatedChangeSet ? updatedChangeSet[cell.row.index] : null;
         let cellValue = rowChangeSet ? rowChangeSet[column.key || column.name] ?? cell.value : cell.value;
 
-        const rowData = tableData[cell.row.index];
+        const rowData = tableData?.[cell?.row?.index];
         if (
           cell.row.index === 0 &&
-          variablesExposedForPreview &&
+          !_.isEmpty(variablesExposedForPreview) &&
           !_.isEqual(variablesExposedForPreview[id]?.rowData, rowData)
         ) {
           const customResolvables = {};
@@ -175,13 +176,19 @@ export default function generateColumnsData({
                     }}
                     className={`form-control-plaintext form-control-plaintext-sm ${!isValid ? 'is-invalid' : ''}`}
                     defaultValue={cellValue}
+                    onFocus={(e) => e.stopPropagation()}
                   />
                   <div className="invalid-feedback">{validationError}</div>
                 </div>
               );
             }
             return (
-              <div className="d-flex align-items-center h-100" style={cellStyles}>
+              <div
+                className={`d-flex align-items-center h-100 w-100 justify-content-${determineJustifyContentValue(
+                  horizontalAlignment
+                )}`}
+                style={cellStyles}
+              >
                 {String(cellValue)}
               </div>
             );
@@ -240,6 +247,7 @@ export default function generateColumnsData({
                         );
                       }
                     }}
+                    onFocus={(e) => e.stopPropagation()}
                     className={`form-control-plaintext form-control-plaintext-sm ${!isValid ? 'is-invalid' : ''}`}
                     defaultValue={cellValue}
                   />
@@ -248,7 +256,12 @@ export default function generateColumnsData({
               );
             }
             return (
-              <div className="d-flex align-items-center h-100" style={cellStyles}>
+              <div
+                className={`d-flex align-items-center h-100 w-100 justify-content-${determineJustifyContentValue(
+                  horizontalAlignment
+                )}`}
+                style={cellStyles}
+              >
                 {cellValue}
               </div>
             );
@@ -269,11 +282,12 @@ export default function generateColumnsData({
                 }}
                 onKeyDown={(e) => {
                   e.persist();
-                  if (e.key === 'Enter' && isEditable) {
+                  if (e.key === 'Enter' && !e.shiftKey && isEditable) {
                     handleCellValueChange(cell.row.index, column.key || column.name, e.target.value, cell.row.original);
                   }
                 }}
                 defaultValue={cellValue}
+                onFocus={(e) => e.stopPropagation()}
               ></textarea>
             );
           }
@@ -439,6 +453,14 @@ export default function generateColumnsData({
                   }}
                   tableRef={tableRef}
                 />
+              </div>
+            );
+          }
+          case 'link': {
+            const linkTarget = resolveReferences(column?.linkTarget ?? '_blank', currentState);
+            return (
+              <div className="h-100 d-flex align-items-center">
+                <Link cellValue={cellValue} linkTarget={linkTarget} />
               </div>
             );
           }
